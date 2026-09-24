@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RivuLog Printer</title>
+<style>
+:root{color-scheme:dark;--bg:#061012;--card:#10272b;--line:#28515a;--text:#edf8f7;--muted:#9fc4c1;--accent:#55d6d0;--danger:#ff7777}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:22px}
+h1{margin:0 0 4px;font-size:28px}.muted{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{border:1px solid var(--line);background:#15343a;color:var(--text);border-radius:11px;padding:11px 16px;font-size:16px;cursor:pointer}
+button.primary{background:var(--accent);color:#052326;border-color:transparent;font-weight:700}
+button:disabled{opacity:.45;cursor:not-allowed}
+.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:5px 10px;color:var(--muted)}
+img{max-width:100%;background:#fff;border-radius:10px;image-rendering:auto}
+label{color:var(--muted);font-size:14px}
+input[type=range]{width:180px}
+pre{white-space:pre-wrap;word-break:break-word;background:#07191c;border-radius:10px;padding:12px;max-height:220px;overflow:auto;color:#bfe2df}
+.ok{color:#8ff0ae}.err{color:var(--danger)}
+.small{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="row" style="justify-content:space-between">
+    <div>
+      <h1>RivuLog Printer</h1>
+      <div class="muted">Bluetooth bridge for LX-D02 / LX-D2 thermal printers</div>
+    </div>
+    <span id="status" class="tag">starting…</span>
+  </div>
+
+  <div id="browserWarning" class="card err" hidden>
+    This browser does not expose Web Bluetooth. Use Chrome or Edge on a supported desktop/Android device.
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <b id="labelTitle">Waiting for a RivuLog label…</b>
+        <div id="labelMeta" class="small">Open a label preview in RivuLog and choose Print Bluetooth.</div>
+      </div>
+      <span id="labelState" class="tag">no label</span>
+    </div>
+    <div style="margin-top:14px;text-align:center">
+      <img id="preview" alt="RivuLog label preview" hidden>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="connectBtn">Connect printer</button>
+      <button id="printBtn" class="primary" disabled>Connect &amp; Print</button>
+      <button id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <label>Density <b id="densityVal">3</b><br><input id="density" type="range" min="1" max="7" value="3"></label>
+      <label>Feed lines<br><input id="feed" type="number" min="0" max="300" value="40" style="width:90px;padding:7px"></label>
+    </div>
+    <div class="small" style="margin-top:12px">The first Bluetooth connection requires a browser chooser. Keep FunnyPrint/Dolewa closed on the phone so it does not hold the printer connection.</div>
+  </div>
+
+  <div class="card">
+    <b>Bridge log</b>
+    <pre id="log">Loading printer engine…</pre>
+  </div>
+
+  <div class="small" style="margin-top:16px">
+    Printer protocol/rendering engine built from the open-source <b>printa-ble</b> project. Its MIT/OFL license files are included with this site.
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
