@@ -1,5 +1,9 @@
 import init, {render_image, WasmJob, lx_service_uuid, lx_write_uuid, lx_notify_uuid} from './pkg/printa_ble_web.js';
 
+// RivuLog Printer v1.1 — Continuous batch printing (2026-10-09)
+// Keeps the existing LX-D02 Web Bluetooth engine; joins label PNGs in one
+// 384-pixel-wide bitmap to avoid the printer's between-job paper advance.
+
 const $=id=>document.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const errMsg=e=>e instanceof Error?e.message:String(e);
@@ -29,6 +33,7 @@ function acceptMessage(m,origin){if(printing)return log('New label payload ignor
  $('printBtn').disabled=false;log('Received '+prepared.length+' label(s) from RivuLog');showPreview().catch(e=>log('Preview error: '+errMsg(e)));
  }catch(e){log('Label rejected: '+errMsg(e));setStatus('label error',true);}}
 window.addEventListener('message',e=>{if(window.opener&&e.source!==window.opener)return;if(expectedOrigin&&e.origin!==expectedOrigin){log('Ignored message from unexpected origin: '+e.origin);return;}acceptMessage(e.data,e.origin);});
+
 async function connect(){if(!bluetoothSupported)throw Error('This browser does not support Web Bluetooth');if(connected&&device?.gatt?.connected)return;setStatus('connecting…');$('connectBtn').disabled=true;log('Opening Bluetooth chooser…');try{
  device=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'LX'}],optionalServices:[LX_SERVICE]});device.addEventListener('gattserverdisconnected',onDisconnect);
  const server=await device.gatt.connect(),svc=await server.getPrimaryService(LX_SERVICE);writeChar=await svc.getCharacteristic(LX_WRITE);notifyChar=await svc.getCharacteristic(LX_NOTIFY);await notifyChar.startNotifications();notifyChar.addEventListener('characteristicvaluechanged',onNotify);connected=true;$('disconnectBtn').disabled=false;updateStatus();log('Connected to '+(device.name||'LX printer'));
@@ -42,18 +47,78 @@ function armWatchdog(){clearWatchdog();watchdog=setTimeout(()=>{watchdog=null;fi
 function clearWatchdog(){if(watchdog!==null){clearTimeout(watchdog);watchdog=null;}}
 function finishJob(err){clearWatchdog();const j=job,settle=jobSettle;job=null;jobSettle=null;if(!j)return;const je=err||(j.error()?new Error(j.error()):null);j.free();if(settle){if(je)settle.reject(je);else settle.resolve();}}
 function runJob(bitmap,density){if(job)return Promise.reject(Error('Print job already running'));return new Promise((resolve,reject)=>{try{const challenge=crypto.getRandomValues(new Uint8Array(10));job=new WasmJob(bitmap,density,challenge);jobSettle={resolve,reject};pump();}catch(e){reject(Error(errMsg(e)));}});}
-async function printLabels(){if(printing)return;if(!labels.length)throw Error('No RivuLog labels received');printing=true;$('printBtn').disabled=true;$('connectBtn').disabled=true;$('disconnectBtn').disabled=true;let done=0;
+
+// Compose original 384-dot PNG labels at 1:1 scale. No resizing, blank spacer,
+// or independent end-of-job feed between individual labels.
+async function combineLabelPngs(items){
+ const decoded=[];
+ let totalHeight=0;
  try{
-  if(!connected)await connect();const density=Math.max(1,Math.min(7,Number($('density').value)||3)),lastFeed=Math.max(0,Math.min(300,Number($('feed').value)||40));
-  for(let i=0;i<labels.length;i++){
-   const item=labels[i];let bitmap=null;
-   try{setStatus(`printing ${i+1}/${labels.length}…`);$('labelState').textContent=`${i+1}/${labels.length}`;log(`Printing ${i+1}/${labels.length}: ${item.title}`);bitmap=render_image(item.bytes,'threshold');if(bitmap.height()===0)throw Error('Label rendered empty');
-    // Intermediate labels already contain their own separator line. Avoid extra blank-feed gaps.
-    if(i===labels.length-1&&lastFeed>0)bitmap.extend_blank(lastFeed);
-    await runJob(bitmap,density);done++;notifyOpener({type:'RIVULOG_PRINTER_PROGRESS',printed:done,total:labels.length,recordId:item.recordId});
-   }finally{if(bitmap)bitmap.free();}
+  for(const item of items){
+   const img=await createImageBitmap(new Blob([item.bytes],{type:'image/png'}));
+   decoded.push(img);
+   if(img.width!==384)throw Error(`Expected 384-dot label width, got ${img.width} for ${item.title}`);
+   if(img.height<1||img.height>2000)throw Error(`Unexpected label height ${img.height} for ${item.title}`);
+   totalHeight+=img.height;
   }
-  log('Batch complete: '+done+'/'+labels.length);notifyOpener({type:'RIVULOG_PRINTER_RESULT',ok:true,batch:labels.length>1,printed:done,total:labels.length,labelType:labels.length===1?labels[0].labelType:'Tank',recordId:labels.length===1?labels[0].recordId:''});
+  // Chrome supports canvases this tall, but a very long print job is harder
+  // to recover if the printer disconnects. Refuse rather than silently split.
+  if(totalHeight>24000)throw Error('Batch too long for continuous printing. Select fewer labels.');
+  const canvas=document.createElement('canvas');
+  canvas.width=384;canvas.height=totalHeight;
+  const ctx=canvas.getContext('2d',{alpha:false});
+  if(!ctx)throw Error('Could not create label-combining canvas.');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,384,totalHeight);
+  ctx.imageSmoothingEnabled=false;
+  let y=0;
+  for(const img of decoded){ctx.drawImage(img,0,y);y+=img.height;}
+  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not encode continuous print image.')),'image/png'));
+  log(`Continuous image ready: 384 × ${totalHeight} dots, ${items.length} labels, no extra gap`);
+  return new Uint8Array(await blob.arrayBuffer());
+ }finally{for(const img of decoded)img.close();}
+}
+
+async function printLabels(){
+ if(printing)return;
+ if(!labels.length)throw Error('No RivuLog labels received');
+ printing=true;$('printBtn').disabled=true;$('connectBtn').disabled=true;$('disconnectBtn').disabled=true;let done=0;
+ try{
+  if(!connected)await connect();
+  const density=Math.max(1,Math.min(7,Number($('density').value)||3));
+  // Important: don't use `Number(value) || 40` — that turns a requested 0 into 40.
+  const feedInput=Number($('feed').value);
+  const lastFeed=Number.isFinite(feedInput)?Math.max(0,Math.min(300,Math.trunc(feedInput))):0;
+  const continuous=labels.length>1 && $('continuousBatch')?.checked!==false;
+  if(continuous){
+   let bitmap=null;
+   try{
+    setStatus(`continuous batch: ${labels.length} labels…`);
+    $('labelState').textContent=`printing ${labels.length} together`;
+    const image=await combineLabelPngs(labels);
+    bitmap=render_image(image,'threshold');
+    if(bitmap.height()===0)throw Error('Batch rendered empty');
+    if(lastFeed>0)bitmap.extend_blank(lastFeed);
+    log(`Sending one Bluetooth print job: ${labels.length} labels, ${bitmap.height()} rows, feed=${lastFeed}`);
+    await runJob(bitmap,density);
+    done=labels.length;
+    notifyOpener({type:'RIVULOG_PRINTER_PROGRESS',printed:done,total:labels.length,recordId:labels[labels.length-1].recordId});
+   }finally{if(bitmap)bitmap.free();}
+  }else{
+   // Legacy fallback: individual jobs (may add unwanted paper between labels).
+   for(let i=0;i<labels.length;i++){
+    const item=labels[i];let bitmap=null;
+    try{
+     setStatus(`printing ${i+1}/${labels.length}…`);$('labelState').textContent=`${i+1}/${labels.length}`;
+     log(`Individual job ${i+1}/${labels.length}: ${item.title}`);
+     bitmap=render_image(item.bytes,'threshold');if(bitmap.height()===0)throw Error('Label rendered empty');
+     if(i===labels.length-1&&lastFeed>0)bitmap.extend_blank(lastFeed);
+     await runJob(bitmap,density);done++;
+     notifyOpener({type:'RIVULOG_PRINTER_PROGRESS',printed:done,total:labels.length,recordId:item.recordId});
+    }finally{if(bitmap)bitmap.free();}
+   }
+  }
+  log('Batch complete: '+done+'/'+labels.length);
+  notifyOpener({type:'RIVULOG_PRINTER_RESULT',ok:true,batch:labels.length>1,printed:done,total:labels.length,labelType:labels.length===1?labels[0].labelType:'Tank',recordId:labels.length===1?labels[0].recordId:''});
  }catch(e){log('Print stopped after '+done+'/'+labels.length+': '+errMsg(e));notifyOpener({type:'RIVULOG_PRINTER_RESULT',ok:false,error:errMsg(e),batch:labels.length>1,printed:done,total:labels.length});setStatus('print failed',true);
  }finally{printing=false;$('printBtn').disabled=!labels.length;$('connectBtn').disabled=false;$('disconnectBtn').disabled=!connected;if(connected)updateStatus();$('labelState').textContent=done+'/'+labels.length+' printed';}
 }
@@ -62,4 +127,4 @@ $('connectBtn').addEventListener('click',()=>connect().catch(e=>{log('Connection
 $('printBtn').addEventListener('click',()=>printLabels().catch(e=>log('Print failed: '+errMsg(e))));
 $('disconnectBtn').addEventListener('click',disconnect);
 if(!bluetoothSupported){$('browserWarning').hidden=false;$('connectBtn').disabled=true;}updateStatus();
-try{await init();LX_SERVICE=lx_service_uuid();LX_WRITE=lx_write_uuid();LX_NOTIFY=lx_notify_uuid();log('Printer engine ready');notifyOpener({type:'RIVULOG_PRINTER_READY'});}catch(e){log('Printer engine failed to load: '+errMsg(e));setStatus('engine load failed',true);$('connectBtn').disabled=true;$('printBtn').disabled=true;}
+try{await init();LX_SERVICE=lx_service_uuid();LX_WRITE=lx_write_uuid();LX_NOTIFY=lx_notify_uuid();log('Printer engine ready · RivuLog Printer v1.1 continuous batch');notifyOpener({type:'RIVULOG_PRINTER_READY'});}catch(e){log('Printer engine failed to load: '+errMsg(e));setStatus('engine load failed',true);$('connectBtn').disabled=true;$('printBtn').disabled=true;}

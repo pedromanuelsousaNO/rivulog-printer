@@ -22,6 +22,8 @@ input[type=range]{width:180px}
 pre{white-space:pre-wrap;word-break:break-word;background:#07191c;border-radius:10px;padding:12px;max-height:220px;overflow:auto;color:#bfe2df}
 .ok{color:#8ff0ae}.err{color:var(--danger)}
 .small{font-size:13px;color:var(--muted)}
+.option{display:flex;align-items:center;gap:8px;color:var(--text);font-size:15px}
+.option input{width:18px;height:18px;accent-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -29,7 +31,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#07191c;border-radius:
   <div class="row" style="justify-content:space-between">
     <div>
       <h1>RivuLog Printer</h1>
-      <div class="muted">Bluetooth bridge for LX-D02 / LX-D2 thermal printers</div>
+      <div class="muted">Bluetooth bridge for LX-D02 / LX-D2 thermal printers · v1.1 continuous batch</div>
     </div>
     <span id="status" class="tag">starting…</span>
   </div>
@@ -59,8 +61,12 @@ pre{white-space:pre-wrap;word-break:break-word;background:#07191c;border-radius:
     </div>
     <div class="row" style="margin-top:16px">
       <label>Density <b id="densityVal">3</b><br><input id="density" type="range" min="1" max="7" value="3"></label>
-      <label>Feed lines<br><input id="feed" type="number" min="0" max="300" value="40" style="width:90px;padding:7px"></label>
+      <label>Feed lines after LAST label<br><input id="feed" type="number" min="0" max="300" value="0" style="width:90px;padding:7px;background:#15343a;color:#edf8f7;border:1px solid #28515a;border-radius:7px"></label>
     </div>
+    <div class="row" style="margin-top:16px">
+      <label class="option"><input id="continuousBatch" type="checkbox" checked> Continuous batch (no gap between labels)</label>
+    </div>
+    <div class="small" style="margin-top:8px">Recommended: keep continuous batch ON and feed lines at 0. If a long print job fails, turn continuous batch OFF to use the previous one-job-per-label method.</div>
     <div class="small" style="margin-top:12px">The first Bluetooth connection requires a browser chooser. Keep FunnyPrint/Dolewa closed on the phone so it does not hold the printer connection.</div>
   </div>
 
