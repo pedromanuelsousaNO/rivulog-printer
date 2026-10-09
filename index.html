@@ -31,7 +31,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#07191c;border-radius:
   <div class="row" style="justify-content:space-between">
     <div>
       <h1>RivuLog Printer</h1>
-      <div class="muted">Bluetooth bridge for LX-D02 / LX-D2 thermal printers · v1.1 continuous batch</div>
+      <div class="muted">Bluetooth bridge for LX-D02 / LX-D2 thermal printers · v1.2 shared cut lines</div>
     </div>
     <span id="status" class="tag">starting…</span>
   </div>
@@ -64,7 +64,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#07191c;border-radius:
       <label>Feed lines after LAST label<br><input id="feed" type="number" min="0" max="300" value="0" style="width:90px;padding:7px;background:#15343a;color:#edf8f7;border:1px solid #28515a;border-radius:7px"></label>
     </div>
     <div class="row" style="margin-top:16px">
-      <label class="option"><input id="continuousBatch" type="checkbox" checked> Continuous batch (no gap between labels)</label>
+      <label class="option"><input id="continuousBatch" type="checkbox" checked> Continuous batch (one shared cut line)</label>
     </div>
     <div class="small" style="margin-top:8px">Recommended: keep continuous batch ON and feed lines at 0. If a long print job fails, turn continuous batch OFF to use the previous one-job-per-label method.</div>
     <div class="small" style="margin-top:12px">The first Bluetooth connection requires a browser chooser. Keep FunnyPrint/Dolewa closed on the phone so it does not hold the printer connection.</div>

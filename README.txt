@@ -1,29 +1,17 @@
-RivuLog Printer v1.1 — Continuous Batch Printing
+RivuLog Printer V1.2 — Shared cut lines
 
-Contents of this ZIP:
-  index.html  — replace index.html in GitHub repo rivulog-printer
-  app.js      — replace app.js in the SAME repo
+FIX
+- Continuous Bluetooth batches now have one shared cutting line between adjacent labels.
+- Leaves the first label top line and final label bottom line intact.
+- Does not change label bitmap dimensions (384 x 300), QR size, or text.
+- Single label printing is unchanged and keeps both lines.
+- Affects tank labels from RivuLog V5.4.3 only (line at x=8..375, y=5..6).
 
-Keep the existing pkg/ folder and printer WASM engine untouched.
+INSTALL
+1. In GitHub repository rivulog-printer, replace index.html and app.js.
+2. Commit and wait for GitHub Pages.
+3. Fully close/reopen printer bridge (Ctrl+Shift+R if required).
+4. Keep Continuous batch selected, Feed lines=0.
+5. Print two labels to test.
 
-Changes:
- - Default Feed lines after last label: 0 (the zero value now works).
- - Continuous batch checked by default: compose a single 384-dot-wide PNG
-   with the labels directly touching and print it with one WasmJob.
- - Individual-job fallback can be selected by unchecking Continuous batch.
- - Existing Web Bluetooth setup, label reception, label rasterization,
-   printer result messages, and printer diagnostics preserved.
-
-Testing:
- 1. Update both repository files and wait until Pages deployment is finished.
- 2. Close existing printer window, hard-refresh Apps Script and open batch
-    print for 2 labels from RivuLog V5.4.3.
- 3. Verify Continuous batch ON, Feed lines 0, then print.
- 4. Inspect printed strip and scan QR codes.
-
-Warnings:
- - If a print job fails partway, some labels may have already been printed.
-   Inspect the strip before retrying so you don't duplicate labels.
- - Hardware behavior cannot be verified without a live LX-D02 printer.
- - Very large continuous batches may use more memory/time than before;
-   the Individual-jobs option remains available as a fallback.
+No change required to Google Apps Script / RivuLog or printer WASM pkg.

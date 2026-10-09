@@ -1,6 +1,6 @@
 import init, {render_image, WasmJob, lx_service_uuid, lx_write_uuid, lx_notify_uuid} from './pkg/printa_ble_web.js';
 
-// RivuLog Printer v1.1 — Continuous batch printing (2026-10-09)
+// RivuLog Printer v1.2 — Shared cut lines (2026-10-10)
 // Keeps the existing LX-D02 Web Bluetooth engine; joins label PNGs in one
 // 384-pixel-wide bitmap to avoid the printer's between-job paper advance.
 
@@ -71,7 +71,20 @@ async function combineLabelPngs(items){
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,384,totalHeight);
   ctx.imageSmoothingEnabled=false;
   let y=0;
-  for(const img of decoded){ctx.drawImage(img,0,y);y+=img.height;}
+  for(let i=0;i<decoded.length;i++){
+   const img=decoded[i];
+   ctx.drawImage(img,0,y);
+   // V1.2: V5.4.3 tank labels have a top guide at y=5..6 and a bottom
+   // guide at y=293..294. For a continuous batch, the PREVIOUS label's
+   // bottom guide is the shared cut boundary. Suppress only the duplicate
+   // top guide on subsequent tank labels; do not crop or resize the image.
+   // Single-label jobs still keep both their own guides.
+   if(i>0 && items[i].labelType==='Tank' && img.height===300){
+    ctx.fillStyle='#fff';
+    ctx.fillRect(8,y+5,368,2);
+   }
+   y+=img.height;
+  }
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not encode continuous print image.')),'image/png'));
   log(`Continuous image ready: 384 × ${totalHeight} dots, ${items.length} labels, no extra gap`);
   return new Uint8Array(await blob.arrayBuffer());
